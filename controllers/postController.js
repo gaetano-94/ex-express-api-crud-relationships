@@ -1,95 +1,123 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
+const { validationResult } = require('express-validator');
 
-// Funzione per creare un nuovo post
+// Create a new post
 const createPost = async (req, res) => {
-  const { title, slug, image, content, published, categoryId, tags } = req.body;
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { title, content, slug, published, categoryId, tags } = req.body;
   try {
     const post = await prisma.post.create({
       data: {
         title,
-        slug,
-        image,
         content,
+        slug,
         published,
-        category: { connect: { id: categoryId } },
-        tags: { connect: tags.map((tagId) => ({ id: tagId })) },
+        categoryId,
+        tags: {
+          connect: tags.map((tag) => ({ id: tag })),
+        },
       },
     });
     res.status(201).json(post);
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    res.status(400).json({ error: 'Post creation failed' });
   }
 };
 
-// Funzione per recuperare un post utilizzando il suo slug
+// Get a post by slug
 const getPostBySlug = async (req, res) => {
   const { slug } = req.params;
   try {
     const post = await prisma.post.findUnique({
       where: { slug },
-      include: { category: true, tags: true },
+      include: {
+        category: true,
+        tags: true,
+      },
     });
-    if (!post) {
-      return res.status(404).json({ error: 'Post not found' });
+    if (post) {
+      res.json(post);
+    } else {
+      res.status(404).json({ error: 'Post not found' });
     }
-    res.json(post);
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to retrieve post' });
   }
 };
 
-// Funzione per recuperare tutti i post
+// Get all posts with optional filtering
 const getAllPosts = async (req, res) => {
   const { published, search } = req.query;
+  let where = {};
+  if (published) {
+    where.published = published === 'true';
+  }
+  if (search) {
+    where.OR = [
+      { title: { contains: search, mode: 'insensitive' } },
+      { content: { contains: search, mode: 'insensitive' } },
+    ];
+  }
   try {
     const posts = await prisma.post.findMany({
-      where: {
-        AND: [
-          published !== undefined ? { published: published === 'true' } : {},
-          search
-            ? {
-                OR: [
-                  { title: { contains: search, mode: 'insensitive' } },
-                  { content: { contains: search, mode: 'insensitive' } },
-                ],
-              }
-            : {},
-        ],
+      where,
+      include: {
+        category: true,
+        tags: true,
       },
-      include: { category: true, tags: true },
     });
     res.json(posts);
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to retrieve posts' });
   }
 };
 
-// Funzione per aggiornare un post
+// Update a post by slug
 const updatePost = async (req, res) => {
   const { slug } = req.params;
-  const data = req.body;
+  const { title, content, published, categoryId, tags } = req.body;
+
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
   try {
-    const updatedPost = await prisma.post.update({
+    const post = await prisma.post.update({
       where: { slug },
-      data,
+      data: {
+        title,
+        content,
+        published,
+        categoryId,
+        tags: {
+          set: tags.map((tag) => ({ id: tag })),
+        },
+      },
+      include: {
+        category: true,
+        tags: true,
+      },
     });
-    res.json(updatedPost);
+    res.json(post);
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    res.status(400).json({ error: 'Post update failed' });
   }
 };
 
-// Funzione per eliminare un post
+// Delete a post by slug
 const deletePost = async (req, res) => {
   const { slug } = req.params;
   try {
-    const deletedPost = await prisma.post.delete({
-      where: { slug },
-    });
-    res.json(deletedPost);
+    await prisma.post.delete({ where: { slug } });
+    res.status(204).send();
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    res.status(400).json({ error: 'Post deletion failed' });
   }
 };
 

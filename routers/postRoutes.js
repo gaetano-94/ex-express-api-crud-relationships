@@ -1,5 +1,4 @@
 const express = require('express');
-const router = express.Router();
 const {
   createPost,
   getPostBySlug,
@@ -7,11 +6,14 @@ const {
   updatePost,
   deletePost,
 } = require('../controllers/postController');
+const { postValidationRules } = require('../validations/postValidation');
 
-router.post('/posts', createPost);
+const router = express.Router();
+
+router.post('/posts', postValidationRules, createPost);
 router.get('/posts/:slug', getPostBySlug);
 router.get('/posts', getAllPosts);
-router.put('/posts/:slug', updatePost);
+router.put('/posts/:slug', postValidationRules, updatePost);
 router.delete('/posts/:slug', deletePost);
 
 module.exports = router;
